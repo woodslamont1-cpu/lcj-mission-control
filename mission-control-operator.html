@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Mission Control</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0a0b0f; --card:#11131a; --border:#262b36; --text:#f3f5f7; --muted:#8f98aa; --accent:#c9a227; --good:#49c98b; --warn:#e6a14a; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; background: linear-gradient(180deg, #07080b, #0a0b0f 55%, #07080b); color:var(--text); }
+    .wrap { max-width: 1420px; margin: 0 auto; padding: 24px; }
+    .top { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:20px; }
+    .brand h1 { margin:0; font-size: 30px; }
+    .brand p { margin:8px 0 0; color:var(--muted); }
+    .pill { padding:8px 12px; border:1px solid var(--border); border-radius:999px; background:rgba(255,255,255,.03); color:var(--muted); font-size:13px; }
+    .grid { display:grid; gap:16px; }
+    .grid.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid.two { grid-template-columns: 1.4fr .9fr; }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card { border:1px solid var(--border); background: rgba(17,19,26,.88); border-radius: 18px; padding:16px; box-shadow: 0 18px 40px rgba(0,0,0,.24); }
+    .card h2,.card h3 { margin:0 0 10px; }
+    .muted { color:var(--muted); }
+    .big { font-size: 30px; font-weight: 700; }
+    .kpi { display:flex; flex-direction:column; gap:4px; }
+    pre { margin:0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.45; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,.06); vertical-align:top; }
+    th { color:#cfd5df; font-size: 12px; text-transform: uppercase; letter-spacing:.06em; }
+    .tag { display:inline-block; padding:4px 8px; border-radius:999px; background: rgba(201,162,39,.12); color:#f3d37c; font-size:12px; }
+    .tag.good { background: rgba(73,201,139,.12); color: #8df0be; }
+    .tag.warn { background: rgba(230,161,74,.12); color: #ffd092; }
+    .tag.neutral { background: rgba(255,255,255,.08); color: #d6dbe3; }
+    .row { display:flex; gap:10px; flex-wrap: wrap; }
+    .toolbar { display:flex; gap:10px; align-items:center; }
+    .callout { border:1px solid var(--border); background: rgba(255,255,255,.025); border-radius: 16px; padding:14px 16px; }
+    .callout ul { margin:8px 0 0 18px; color: var(--muted); }
+    .callout li { margin: 4px 0; }
+    .audit-detail { border:1px solid var(--border); background: rgba(255,255,255,.02); border-radius: 16px; padding:14px; }
+    .audit-detail pre { background: rgba(255,255,255,.03); padding:12px; border-radius:12px; margin-top:10px; }
+    .demo-path { margin-top:16px; border:1px solid var(--border); background: rgba(255,255,255,.02); border-radius: 16px; padding:14px 16px; }
+    .demo-path ol { margin:8px 0 0 18px; color: var(--muted); }
+    .demo-path li { margin: 4px 0; }
+    details.legacy-shell { margin-top:16px; border:1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,.02); padding: 12px 14px; }
+    details.legacy-shell > summary { cursor:pointer; list-style:none; font-weight: 600; }
+    details.legacy-shell > summary::-webkit-details-marker { display:none; }
+    .filter-grid { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    input, select, textarea { width:100%; border:1px solid var(--border); background: rgba(255,255,255,.04); color: var(--text); border-radius: 10px; padding: 10px 12px; font: inherit; }
+    textarea { min-height: 160px; resize: vertical; }
+    .export-box { margin-top:10px; }
+    .export-box pre { background: rgba(255,255,255,.03); padding:12px; border-radius:12px; overflow:auto; max-height: 260px; }
+    button { border:1px solid var(--border); background: rgba(255,255,255,.04); color:var(--text); padding:10px 14px; border-radius: 12px; cursor:pointer; }
+    button:hover { border-color: var(--accent); }
+    a { color:#8ab4ff; }
+  </style>
+</head>
+<body data-demo-mode="operator" data-mission-control-demo="true">
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <div class="pill">Hermes operator layer • demo mode • read-only Mission Control UI</div>
+        <h1>Mission Control</h1>
+        <p>Operator-only demo mode: trusted core first, then action, traceability, and filter/export.</p>
+      </div>
+      <div class="toolbar">
+        <button onclick="refreshAll()">Refresh</button>
+        <div id="statusPill" class="pill">Loading…</div>
+      </div>
+    </div>
+
+    <div class="grid kpis">
+      <div class="card kpi"><span class="muted">Live allowlisted tasks</span><span id="kpiTasks" class="big">—</span></div>
+      <div class="card kpi"><span class="muted">Human review</span><span id="kpiReview" class="big">—</span></div>
+      <div class="card kpi"><span class="muted">AI calls made</span><span id="kpiAIMade" class="big">—</span></div>
+      <div class="card kpi"><span class="muted">Fallback activations</span><span id="kpiFallback" class="big">—</span></div>
+    </div>
+
+    <div class="card callout" style="margin-top:16px;">
+      <h2>Operator Safety & Audit Guidance</h2>
+      <div class="row" style="margin-bottom:8px;">
+        <span class="tag good">safe to act on</span>
+        <span class="tag neutral">trusted core</span>
+        <span class="tag warn">optional / legacy fallback</span>
+      </div>
+      <ul>
+        <li>Safe to act on today: review approve/request-changes/reject and enrollment approve/enroll.</li>
+        <li>Trusted core surfaces: systems overview, activity timeline, pending review queue, review history, enrollment queue, enrollment activity.</li>
+        <li>Optional legacy surfaces: status, config, metrics, recent events, recent tasks.</li>
+        <li>Use the trusted core first; treat legacy/fallback panels as context, not primary truth.</li>
+      </ul>
+    </div>
+
+    <div class="card callout" style="margin-top:16px;">
+      <h2>Demo Mode Focus</h2>
+      <div class="muted">Keep the walkthrough tight: trust core → action → traceability → filter/export.</div>
+      <ul>
+        <li>Show the trusted core panels first.</li>
+        <li>Use one review action and one enrollment action.</li>
+        <li>Open trace drill-down after each action.</li>
+        <li>Only expand legacy context if someone asks for raw status.</li>
+      </ul>
+    </div>
+
+    <div class="demo-path">
+      <h2>Recommended Demo Path</h2>
+      <div class="muted">Trust core → action → traceability → filter/export</div>
+      <ol>
+        <li>Systems Overview</li>
+        <li>Activity Timeline</li>
+        <li>Pending Review Queue + one bounded review action</li>
+        <li>Audit Drill-Down on a review item</li>
+        <li>Enrollment Queue + one bounded enrollment action</li>
+        <li>Audit Drill-Down on an enrollment item</li>
+        <li>Filtered review history and enrollment activity</li>
+        <li>Export previews</li>
+      </ol>
+    </div>
+
+    <details class="legacy-shell" style="margin-top:16px;">
+      <summary>Trusted Context Snapshot</summary>
+      <div class="muted" style="margin-top:8px;">Secondary raw status/config context. Collapse this during demos to keep the operator flow tight.</div>
+      <div class="grid two" style="margin-top:12px;">
+        <div class="card">
+          <h2>Trusted Core — Status</h2>
+          <pre id="statusBox">Loading…</pre>
+        </div>
+        <div class="card">
+          <h2>Trusted Core — Config</h2>
+          <pre id="configBox">Loading…</pre>
+        </div>
+      </div>
+    </details>
+
+    <div class="grid two" style="margin-top:16px;">
+      <div class="card">
+        <h2>Trusted Core — Systems Overview</h2>
+        <div id="systemsBox">Loading…</div>
+      </div>
+      <div class="card">
+        <h2>Trusted Core — Activity Timeline</h2>
+        <div id="activityBox">Loading…</div>
+      </div>
+    </div>
+
+    <div class="grid two" style="margin-top:16px;">
+      <div class="card">
+        <h2>Trusted Core — Pending Review Queue</h2>
+        <div id="reviewBox">Loading…</div>
+      </div>
+      <div class="card">
+        <h2>Trusted Core — Review History</h2>
+        <div id="pendingReviewBox">Loading…</div>
+      </div>
+    </div>
+
+    <div class="grid two" style="margin-top:16px;">
+      <div class="card">
+        <h2>Trusted Core — Enrollment Queue</h2>
+        <div id="enrollmentBox">Loading…</div>
+      </div>
+      <div class="card">
+        <h2>Trusted Core — Enrollment Activity</h2>
+        <div id="enrollmentActivityBox">Loading…</div>
+      </div>
+    </div>
+
+    <div class="card audit-detail" style="margin-top:16px;">
+      <h2>Audit Drill-Down</h2>
+      <div class="muted">Select a review or enrollment row to trace action → state change → history entry → source evidence.</div>
+      <div id="auditDetailBox" style="margin-top:10px;">No selection yet.</div>
+    </div>
+
+    <div class="card audit-detail" style="margin-top:16px;">
+      <h2>Audit Filters & Export-Friendly Views</h2>
+      <div class="muted">Use filters to narrow history without changing source truth. Export previews are copy-friendly and read-only.</div>
+      <div class="grid two" style="margin-top:12px;">
+        <div>
+          <h3>Review History</h3>
+          <div class="filter-grid">
+            <input id="reviewFilterAction" placeholder="action contains…">
+            <input id="reviewFilterReviewer" placeholder="reviewed_by contains…">
+            <input id="reviewFilterText" placeholder="text contains…">
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button type="button" data-reset="review">Reset review filters</button>
+          </div>
+          <div id="reviewFilteredBox" style="margin-top:12px;"></div>
+          <div class="export-box">
+            <h3>Review export preview</h3>
+            <pre id="reviewExportBox">Loading…</pre>
+          </div>
+        </div>
+        <div>
+          <h3>Enrollment Activity</h3>
+          <div class="filter-grid">
+            <input id="enrollFilterText" placeholder="text contains…">
+            <input id="enrollFilterApproval" placeholder="approval_state contains…">
+            <input id="enrollFilterEnrollment" placeholder="enrollment_state contains…">
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button type="button" data-reset="enrollment">Reset enrollment filters</button>
+          </div>
+          <div id="enrollFilteredBox" style="margin-top:12px;"></div>
+          <div class="export-box">
+            <h3>Enrollment export preview</h3>
+            <pre id="enrollExportBox">Loading…</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <details class="legacy-shell">
+      <summary>Optional / Legacy Context Panels</summary>
+      <div class="muted" style="margin-top:8px;">Collapsed in demo mode. Expand only when context from raw status, events, or tasks is needed.</div>
+      <div class="grid two" style="margin-top:12px;">
+        <div class="card">
+          <h2>Optional / Legacy — Metrics</h2>
+          <pre id="metricsBox">Loading…</pre>
+        </div>
+        <div class="card">
+          <h2>Optional / Legacy — Recent Events</h2>
+          <div id="eventsBox">Loading…</div>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top:16px;">
+        <div class="card">
+          <h2>Optional / Legacy — Recent Tasks</h2>
+          <div id="tasksBox">Loading…</div>
+        </div>
+        <div class="card">
+          <h2>Optional / Legacy — Notes</h2>
+          <div class="muted">The page keeps these panels available for context, but the trusted core above is the primary operator surface.</div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <script>
+    const MISSION_CONTROL_BASE = 'http://127.0.0.1:8080';
+    const HEALTH_BASE = 'http://127.0.0.1:3001';
+
+    async function getJSON(path, base = MISSION_CONTROL_BASE) {
+      const url = path.startsWith('http') ? path : `${base}${path}`;
+      const res = await fetch(url, {cache: 'no-store'});
+      if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+      return await res.json();
+    }
+
+    async function reviewJSON(path, options = {}) {
+      const url = path.startsWith('http') ? path : `${MISSION_CONTROL_BASE}${path}`;
+      const res = await fetch(url, {cache: 'no-store', ...options});
+      if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+      return await res.json();
+    }
+
+    async function enrollmentJSON(path, options = {}) {
+      const url = path.startsWith('http') ? path : `${MISSION_CONTROL_BASE}${path}`;
+      const res = await fetch(url, {cache: 'no-store', ...options});
+      if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+      return await res.json();
+    }
+
+    function renderList(items, fields) {
+      if (!items || !items.length) return '<div class="muted">No items</div>';
+      return '<table><thead><tr>' + fields.map(([k,v]) => `<th>${v}</th>`).join('') + '</tr></thead><tbody>' + items.map(item =>
+        '<tr>' + fields.map(([k]) => `<td>${String(item[k] ?? '—')}</td>`).join('') + '</tr>'
+      ).join('') + '</tbody></table>';
+    }
+
+    function renderSystemsSummary(payload) {
+      if (!payload) return '<div class="muted">No systems summary</div>';
+      const lines = [];
+      lines.push(`<div class="row"><span class="tag good">${payload.status || 'unknown'}</span><span class="tag">${payload.trust_class || 'unknown'}</span></div>`);
+      if (payload.freshness) lines.push(`<div class="muted" style="margin-top:8px;">Freshness: ${payload.freshness.state || 'unknown'} · age ${payload.freshness.age_seconds ?? '—'}s</div>`);
+      if (payload.coverage) lines.push(`<div class="muted">Coverage: ${payload.coverage.covered_sources?.length || 0}/${payload.coverage.expected_sources?.length || 0} sources</div>`);
+      const rows = (payload.service_health || []).map(item => ({
+        system: item.system,
+        status: item.status,
+        trust_class: item.trust_class,
+        last_check: item.last_check,
+      }));
+      lines.push(renderList(rows, [['system','System'],['status','Status'],['trust_class','Trust'],['last_check','Last Check']]));
+      return lines.join('<div style="margin-top:10px;"></div>');
+    }
+
+    function renderActivitySummary(payload) {
+      if (!payload) return '<div class="muted">No activity summary</div>';
+      const lines = [];
+      lines.push(`<div class="row"><span class="tag good">${payload.status || 'unknown'}</span><span class="tag">${payload.trust_class || 'unknown'}</span></div>`);
+      if (payload.freshness) lines.push(`<div class="muted" style="margin-top:8px;">Freshness: ${payload.freshness.state || 'unknown'} · latest ${payload.freshness.latest_timestamp || '—'}</div>`);
+      if (payload.activity_summary) lines.push(`<div style="margin-top:8px;">${payload.activity_summary}</div>`);
+      const rows = (payload.recent_activity || []).map(item => ({
+        timestamp: item.timestamp,
+        source: item.source,
+        category: item.category,
+        severity: item.severity,
+        message: item.message,
+      }));
+      lines.push(renderList(rows, [['timestamp','Timestamp'],['source','Source'],['category','Category'],['severity','Severity'],['message','Message']]));
+      return lines.join('<div style="margin-top:10px;"></div>');
+    }
+
+    function renderReviewQueue(payload) {
+      const items = payload?.items || [];
+      if (!items.length) return '<div class="muted">No pending review items.</div>';
+      return '<table><thead><tr><th>ID</th><th>Type</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + items.map(item => {
+        const traceBtn = `<button data-trace-review="${String(item.id)}">trace</button>`;
+        const actionButtons = ['approve','request-changes','reject'].map(action => `<button data-review-id="${String(item.id)}" data-review-action="${action}">${action}</button>`).join(' ');
+        return `<tr><td>${String(item.id ?? '—')}</td><td>${String(item.task_type ?? '—')}</td><td>${String(item.reason ?? '—')}</td><td>${String(item.review_status ?? '—')}</td><td>${traceBtn} ${actionButtons}</td></tr>`;
+      }).join('') + '</tbody></table>';
+    }
+
+    function renderReviewHistory(payload) {
+      const items = (payload?.items || []).map(item => ({
+        timestamp: item.timestamp,
+        action: item.action,
+        reviewed_by: item.reviewed_by,
+        item: item.source_item?.id || item.source_item?.task_type || '—',
+        note: item.note,
+      }));
+      return renderList(items, [['timestamp','Timestamp'],['action','Action'],['reviewed_by','Reviewed By'],['item','Item'],['note','Note']]);
+    }
+
+    function renderEnrollmentQueue(payload) {
+      const items = (payload?.rows || []).filter(item => item.readiness_state === 'ready_now' || item.approval_state === 'approved' || item.enrollment_state === 'enrolled');
+      if (!items.length) return '<div class="muted">No enrollment candidates.</div>';
+      return '<table><thead><tr><th>ID</th><th>Readiness</th><th>Approval</th><th>Enrollment</th><th>Actions</th></tr></thead><tbody>' + items.slice(0, 12).map(item => {
+        const traceBtn = `<button data-trace-enroll="${String(item.canonical_id)}">trace</button>`;
+        const approveBtn = `<button data-enroll-id="${String(item.canonical_id)}" data-enroll-action="approve">approve</button>`;
+        const enrollBtn = `<button data-enroll-id="${String(item.canonical_id)}" data-enroll-action="enroll">enroll</button>`;
+        return `<tr><td>${String(item.canonical_id ?? '—')}</td><td>${String(item.readiness_state ?? '—')}</td><td>${String(item.approval_state ?? '—')}</td><td>${String(item.enrollment_state ?? '—')}</td><td>${traceBtn} ${approveBtn} ${enrollBtn}</td></tr>`;
+      }).join('') + '</tbody></table>';
+    }
+
+    function renderEnrollmentActivity(payload) {
+      const activity = Object.entries(payload?.items || {}).map(([canonical_id, item]) => ({
+        canonical_id,
+        contact_name: item.contact_name || (payload.rows || []).find(row => String(row.canonical_id) === String(canonical_id))?.contact_name || '—',
+        approval_state: item.approval_state || '—',
+        enrollment_state: item.enrollment_state || '—',
+        approved_by: item.approved_by || item.enrolled_by || '—',
+        approved_at: item.approved_at || '—',
+        enrolled_at: item.enrolled_at || '—',
+        source_type: item.source_type || (payload.rows || []).find(row => String(row.canonical_id) === String(canonical_id))?.source_type || '—',
+      }));
+      return renderList(activity, [['canonical_id','Canonical ID'],['contact_name','Contact'],['approval_state','Approval'],['enrollment_state','Enrollment'],['approved_by','Actor']]);
+    }
+
+    function renderTraceDetail(kind, data) {
+      const title = kind === 'review' ? 'Review Trace' : 'Enrollment Trace';
+      return `<div class="row"><span class="tag good">${title}</span><span class="tag neutral">${kind}</span></div><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function normalizeText(value) {
+      return String(value ?? '').toLowerCase();
+    }
+
+    function getFilterValue(id) {
+      return normalizeText(document.getElementById(id)?.value);
+    }
+
+    function filterReviewItems(items) {
+      const action = getFilterValue('reviewFilterAction');
+      const reviewer = getFilterValue('reviewFilterReviewer');
+      const text = getFilterValue('reviewFilterText');
+      return (items || []).filter(item => {
+        const hay = normalizeText([item.timestamp, item.action, item.reviewed_by, item.item, item.note].join(' '));
+        return (!action || normalizeText(item.action).includes(action)) &&
+               (!reviewer || normalizeText(item.reviewed_by).includes(reviewer)) &&
+               (!text || hay.includes(text));
+      }).sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+    }
+
+    function buildEnrollmentAuditRows(enrollments) {
+      return (enrollments?.rows || []).map(row => {
+        const activity = (enrollments?.items || {})[row.canonical_id] || {};
+        return {
+          ...row,
+          ...activity,
+          contact_name: row.contact_name || activity.contact_name || '—',
+        };
+      });
+    }
+
+    function filterEnrollmentItems(rows) {
+      const text = getFilterValue('enrollFilterText');
+      const approval = getFilterValue('enrollFilterApproval');
+      const enrollment = getFilterValue('enrollFilterEnrollment');
+      return (rows || []).filter(item => {
+        const hay = normalizeText([item.canonical_id, item.contact_name, item.approval_state, item.enrollment_state, item.approved_by, item.enrolled_by, item.source_type, item.region, item.vertical, JSON.stringify(item.source_lineage || []), JSON.stringify(item.workflow_entry_contract || {})].join(' '));
+        return (!text || hay.includes(text)) &&
+               (!approval || normalizeText(item.approval_state).includes(approval)) &&
+               (!enrollment || normalizeText(item.enrollment_state).includes(enrollment));
+      }).sort((a, b) => String(b.approved_at || b.enrolled_at || '').localeCompare(String(a.approved_at || a.enrolled_at || '')));
+    }
+
+    function renderAuditFilters(reviewHistory, enrollments) {
+      const reviewItems = filterReviewItems(reviewHistory?.items || []);
+      const enrollmentRows = filterEnrollmentItems(buildEnrollmentAuditRows(enrollments));
+      document.getElementById('reviewFilteredBox').innerHTML = renderReviewHistory({items: reviewItems});
+      document.getElementById('enrollFilteredBox').innerHTML = renderEnrollmentActivity({items: Object.fromEntries(enrollmentRows.map(row => [row.canonical_id, row])), rows: enrollmentRows});
+      document.getElementById('reviewExportBox').textContent = reviewItems.map(item => JSON.stringify(item)).join('\n');
+      document.getElementById('enrollExportBox').textContent = enrollmentRows.map(item => JSON.stringify(item)).join('\n');
+    }
+
+    function bindAuditFilterEvents() {
+      const ids = ['reviewFilterAction', 'reviewFilterReviewer', 'reviewFilterText', 'enrollFilterText', 'enrollFilterApproval', 'enrollFilterEnrollment'];
+      ids.forEach(id => document.getElementById(id)?.addEventListener('input', () => {
+        const source = window.__auditFilterSource;
+        if (source) renderAuditFilters(source.reviewHistory, source.enrollments);
+      }));
+      document.querySelectorAll('button[data-reset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const which = btn.getAttribute('data-reset');
+          if (which === 'review') {
+            ['reviewFilterAction','reviewFilterReviewer','reviewFilterText'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+          } else {
+            ['enrollFilterText','enrollFilterApproval','enrollFilterEnrollment'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+          }
+          const source = window.__auditFilterSource;
+          if (source) renderAuditFilters(source.reviewHistory, source.enrollments);
+        });
+      });
+    }
+
+    function loadTraceState() {
+      try {
+        const raw = localStorage.getItem('mission-control-audit-trace');
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveTraceState(state) {
+      window.__auditTraceState = state;
+      try { localStorage.setItem('mission-control-audit-trace', JSON.stringify(state)); } catch {}
+    }
+
+    function renderStoredTraceState(enrollments) {
+      const state = window.__auditTraceState || loadTraceState();
+      if (!state) return;
+      if (state.kind === 'review' && state.id) {
+        document.getElementById('auditDetailBox').innerHTML = renderTraceDetail('review', state.data);
+        return;
+      }
+      if (state.kind === 'enrollment' && state.id) {
+        const row = (enrollments.rows || []).find(item => String(item.canonical_id) === String(state.id));
+        const activity = (enrollments.items || {})[state.id] || {};
+        document.getElementById('auditDetailBox').innerHTML = renderTraceDetail('enrollment', {
+          row,
+          activity,
+          trace_chain: {
+            action_taken: row?.approval_state === 'approved' ? (row?.enrollment_state === 'enrolled' ? 'approve + enroll' : 'approve') : 'not approved',
+            resulting_state_change: {
+              approval_state: row?.approval_state,
+              enrollment_state: row?.enrollment_state,
+            },
+            history_entry: activity,
+            source_evidence: row?.workflow_entry_contract || row?.source_lineage || [],
+          },
+        });
+      }
+    }
+
+    async function refreshAll() {
+      const [status, config, metrics, events, tasks, review, systems, activity, pendingReview, reviewHistory, enrollments] = await Promise.all([
+        getJSON('/api/status'),
+        getJSON('/api/config'),
+        getJSON('/api/metrics'),
+        getJSON('/api/events'),
+        getJSON('/api/tasks'),
+        getJSON('/api/pending-review'),
+        getJSON('/api/systems', HEALTH_BASE),
+        getJSON('/api/activity', HEALTH_BASE),
+        reviewJSON('/api/pending-review'),
+        reviewJSON('/api/review-history'),
+        enrollmentJSON('/api/system/go-high-level-content-engine/enrollments'),
+      ]);
+
+      const statusOk = !status.__error && status.status;
+      document.getElementById('statusPill').textContent = statusOk ? String(status.status).toUpperCase() : 'READ-ONLY';
+      document.getElementById('statusBox').textContent = statusOk ? JSON.stringify(status, null, 2) : `Optional source unavailable: ${status.__path}\n${status.__error}`;
+      document.getElementById('configBox').textContent = config.__error ? `Optional source unavailable: ${config.__path}\n${config.__error}` : JSON.stringify(config, null, 2);
+      document.getElementById('metricsBox').textContent = metrics.__error ? `Optional source unavailable: ${metrics.__path}\n${metrics.__error}` : JSON.stringify(metrics, null, 2);
+      document.getElementById('reviewBox').innerHTML = review.__error ? `<div class="muted">Optional source unavailable: ${review.__path}</div>` : renderList(review.items || review, [['id','ID'],['task_type','Type'],['reason','Reason'],['requested_at','Requested']]);
+      document.getElementById('eventsBox').innerHTML = events.__error ? `<div class="muted">Optional source unavailable: ${events.__path}</div>` : renderList(events.items || events, [['id','ID'],['task_type','Type'],['final_executor','Executor'],['human_review','Human Review'],['task_failed','Failed']]);
+      document.getElementById('tasksBox').innerHTML = tasks.__error ? `<div class="muted">Optional source unavailable: ${tasks.__path}</div>` : renderList(tasks.items || tasks, [['id','ID'],['task_type','Type'],['status','Status'],['final_executor','Executor'],['human_review','Human Review']]);
+      document.getElementById('systemsBox').innerHTML = systems.__error ? `<div class="muted">Optional source unavailable: ${systems.__path}</div>` : renderSystemsSummary(systems);
+      document.getElementById('activityBox').innerHTML = activity.__error ? `<div class="muted">Optional source unavailable: ${activity.__path}</div>` : renderActivitySummary(activity);
+      document.getElementById('reviewBox').innerHTML = pendingReview.__error ? `<div class="muted">Optional source unavailable: ${pendingReview.__path}</div>` : renderReviewQueue(pendingReview);
+      document.getElementById('pendingReviewBox').innerHTML = reviewHistory.__error ? `<div class="muted">Optional source unavailable: ${reviewHistory.__path}</div>` : renderReviewHistory(reviewHistory);
+      document.getElementById('enrollmentBox').innerHTML = enrollments.__error ? `<div class="muted">Optional source unavailable: ${enrollments.__path}</div>` : renderEnrollmentQueue(enrollments);
+      document.getElementById('enrollmentActivityBox').innerHTML = enrollments.__error ? `<div class="muted">Optional source unavailable: ${enrollments.__path}</div>` : renderEnrollmentActivity(enrollments);
+      window.__auditFilterSource = { reviewHistory, enrollments };
+      renderAuditFilters(reviewHistory, enrollments);
+
+      document.getElementById('kpiTasks').textContent = metrics.__error ? '—' : (metrics.total_live_allowlisted_tasks ?? '—');
+      document.getElementById('kpiReview').textContent = metrics.__error ? '—' : (metrics.human_review_required_count ?? '—');
+      document.getElementById('kpiAIMade').textContent = metrics.__error ? '—' : (metrics.ai_calls_made ?? '—');
+      document.getElementById('kpiFallback').textContent = metrics.__error ? '—' : (metrics.fallback_activations ?? '—');
+
+      renderStoredTraceState(enrollments);
+      if (!window.__auditTraceState) {
+        document.getElementById('auditDetailBox').innerHTML = '<div class="muted">Select a review or enrollment row to trace action → state change → history entry → source evidence.</div>';
+      }
+
+      document.querySelectorAll('button[data-trace-review]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const id = button.getAttribute('data-trace-review');
+          const detail = await reviewJSON(`/api/review-items/${encodeURIComponent(id)}`);
+          saveTraceState({ kind: 'review', id, data: detail });
+          document.getElementById('auditDetailBox').innerHTML = renderTraceDetail('review', detail);
+        });
+      });
+
+      document.querySelectorAll('button[data-trace-enroll]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const id = button.getAttribute('data-trace-enroll');
+          const row = (enrollments.rows || []).find(item => String(item.canonical_id) === String(id));
+          const activity = (enrollments.items || {})[id] || {};
+          const detail = {
+            row,
+            activity,
+            trace_chain: {
+              action_taken: row?.approval_state === 'approved' ? (row?.enrollment_state === 'enrolled' ? 'approve + enroll' : 'approve') : 'not approved',
+              resulting_state_change: {
+                approval_state: row?.approval_state,
+                enrollment_state: row?.enrollment_state,
+              },
+              history_entry: activity,
+              source_evidence: row?.workflow_entry_contract || row?.source_lineage || [],
+            },
+          };
+          saveTraceState({ kind: 'enrollment', id, data: detail });
+          document.getElementById('auditDetailBox').innerHTML = renderTraceDetail('enrollment', detail);
+        });
+      });
+
+      document.querySelectorAll('button[data-review-id]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const id = button.getAttribute('data-review-id');
+          const action = button.getAttribute('data-review-action');
+          await reviewJSON(`/api/review-items/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ reviewed_by: 'Mr. Automation', note: 'Mission Control review action from UI' }),
+          });
+          await refreshAll();
+        });
+      });
+
+      document.querySelectorAll('button[data-enroll-id]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const id = button.getAttribute('data-enroll-id');
+          const action = button.getAttribute('data-enroll-action');
+          await enrollmentJSON(`/api/system/go-high-level-content-engine/enrollment/${encodeURIComponent(action)}/${encodeURIComponent(id)}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ reviewed_by: 'Mr. Automation', approved_by: 'Mr. Automation', enrolled_by: 'Mr. Automation' }),
+          });
+          await refreshAll();
+        });
+      });
+    }
+
+    bindAuditFilterEvents();
+
+    refreshAll().catch(err => {
+      document.getElementById('statusPill').textContent = 'ERROR';
+      document.getElementById('statusBox').textContent = String(err);
+    });
+    setInterval(() => refreshAll().catch(() => {}), 30000);
+  </script>
+</body>
+</html>
